@@ -1,7 +1,13 @@
 # Manufacturing process simulation
 By team **Chain of thought**
 
-Streamline all your manufacturing processes together with your teammates, get estimates, and scale.
+**Have you ever seen manufacturing software that enables collaboration?**
+
+Streamline all your manufacturing processes through Miro. Collaborate with your teammates, get estimates, and scale.
+
+With the power of Miro mindmaps, comes great power, but yeah responsibility, too, I suppose.
+![image](https://github.com/notdevkey/chain-of-thought/assets/66126144/9b596ab1-8bca-43cf-87f5-db30874da023)
+
 
 ## Running locally
 
