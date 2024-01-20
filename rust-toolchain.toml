@@ -1,0 +1,5 @@
+[toolchain]
+# https://rust-lang.github.io/rustup-components-history/aarch64-apple-darwin.html
+channel = "nightly-2023-10-04"
+components = ["rustfmt", "clippy", "cargo"]
+targets = ["wasm32-unknown-unknown"]

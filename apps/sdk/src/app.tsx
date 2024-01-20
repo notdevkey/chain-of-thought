@@ -1,12 +1,12 @@
 import * as React from "react";
 import { createRoot } from "react-dom/client";
 
-import "../src/assets/style.css";
 import { ShapeExperimental, ShapeName } from "@mirohq/websdk-types";
-import CreateProcessStep from "./components/createProcessStep";
 import { useState } from "react";
-import { extractTitleFromHTML } from "./utils/domUtil";
+import "../src/assets/style.css";
+import CreateProcessStep from "./components/createProcessStep";
 import { Process, ProcessNode, ProcessProps } from "./models/process";
+import { extractTitleFromHTML } from "./utils/domUtil";
 
 enum MiroItemType {
   shpae = "shape",
@@ -34,7 +34,10 @@ const App: React.FC = () => {
         (x.shape === ShapeName.FlowChartProcess ||
           x.shape === ShapeName.FlowChartConnector)
     );
-    if (!processShapeNodes.length) return;
+    if (!processShapeNodes.length) {
+      setSelectedProcessNode(undefined);
+      return;
+    }
 
     // Handling case of only s single selction
     // TODO: Handle case of multi node selection
@@ -73,8 +76,9 @@ const App: React.FC = () => {
     }
 
     const connecters = await startMiroNode.getConnectors();
-    const nonVisitedConnectors = connecters.filter(connector => !visitedConnections.includes(connector.id));
-
+    const nonVisitedConnectors = connecters.filter(
+      (connector) => !visitedConnections.includes(connector.id)
+    );
 
     if (nonVisitedConnectors.length >= 1) {
       if (nonVisitedConnectors.length === 1) {
@@ -84,32 +88,35 @@ const App: React.FC = () => {
           if (nextProcessNode) {
             processState.push(nextProcessNode);
 
-            setVisitedConnections((prev) => [...prev, nonVisitedConnectors[0].id]);
+            setVisitedConnections((prev) => [
+              ...prev,
+              nonVisitedConnectors[0].id,
+            ]);
           }
         }
       } else {
         const processesByParent: { [parentId: string]: ProcessNode[] } = {};
         const parallelProcesses: Process = [];
 
-        for (const connecterInx in connecters){
+        for (const connecterInx in connecters) {
           const connecter = connecters[connecterInx];
           const nextNodeId = connecter.end?.item;
 
-          if(nextNodeId){
-            const nextProcessNode = await getProcessNodeById(nextNodeId);   
-            
-            if(nextProcessNode){
+          if (nextNodeId) {
+            const nextProcessNode = await getProcessNodeById(nextNodeId);
+
+            if (nextProcessNode) {
               const parentId = nextProcessNode?.parentNode || "";
 
-              if(parentId){
+              if (parentId) {
                 processesByParent[parentId] = [
                   ...(processesByParent[parentId] || []),
                   nextProcessNode,
                 ];
-              }else{
+              } else {
                 parallelProcesses.push(nextProcessNode);
               }
-            }            
+            }
           }
 
           setVisitedConnections((prev) => [...prev, connecter.id]);
@@ -125,11 +132,10 @@ const App: React.FC = () => {
           }
         });
         processState.push(parallelProcesses);
-
       }
     }
 
-    setCompleteProcess((state) => ([...state, processState]))
+    setCompleteProcess((state) => [...state, processState]);
     console.log(processState, console.log(visitedConnections));
   }
 
