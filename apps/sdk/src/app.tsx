@@ -2,79 +2,228 @@ import * as React from "react";
 import { createRoot } from "react-dom/client";
 
 import "../src/assets/style.css";
-import { MindmapNode } from "@mirohq/websdk-types";
+import { ShapeExperimental, ShapeName } from "@mirohq/websdk-types";
 import CreateProcessStep from "./components/createProcessStep";
 import { useState } from "react";
 import { extractTitleFromHTML } from "./utils/domUtil";
-import { ProcessNode, ProcessProps } from "./models/process";
+import { Process, ProcessNode, ProcessProps } from "./models/process";
+
+enum MiroItemType {
+  shpae = "shape",
+}
 
 const App: React.FC = () => {
-  const [selectedMindmapNode, setselectedMindmapNode] = useState<
-    MindmapNode | undefined
-  >();
-  const [selectedProcessData, setSelectedProcessData] = useState<ProcessNode>({
-    nodeId: "",
-    props: {
-      name:'',
-      co: '',
-      ct: '',
-    },
-    nextNodes: [],
-    parenNode: "",
-  });
+  const [completeProcess, setCompleteProcess] = useState<Process[]>([]);
+  const [visitedConnections, setVisitedConnections] = useState<string[]>([]);
 
+  const [processNodes, setProcessNodes] = useState<Map<string, ProcessNode>>(
+    new Map()
+  );
 
+  const [miroNodes, setMiroNodes] = useState<Map<string, ShapeExperimental>>(
+    new Map()
+  );
+
+  const [selectedProcessNode, setSelectedProcessNode] = useState<ProcessNode>();
 
   async function selectionUpdate() {
     const items = await miro.board.experimental.getSelection();
-    if (!items) return;
+    const processShapeNodes = items.filter(
+      (x) =>
+        x.type === MiroItemType.shpae &&
+        (x.shape === ShapeName.FlowChartProcess ||
+          x.shape === ShapeName.FlowChartConnector)
+    );
+    if (!processShapeNodes.length) return;
 
     // Handling case of only s single selction
     // TODO: Handle case of multi node selection
-    if (items.length > 1) return;
+    const selectedProcessShapeNode = processShapeNodes[0] as ShapeExperimental;
 
-    const node = items[0];
+    updateMiroNodesRef(selectedProcessShapeNode);
 
-    // Handling only mindmap_node nodes
-    if (node.type !== "mindmap_node") return;
+    switch (selectedProcessShapeNode.shape) {
+      case ShapeName.FlowChartProcess:
+        const processNode = await createProcessStep(selectedProcessShapeNode);
+        updateProcessNodemap(processNode);
+        break;
 
-    const mindmapNode = node as MindmapNode;
+      case ShapeName.FlowChartConnector:
+        break;
 
-    createMindmapProcess(mindmapNode);
+      default:
+        break;
+    }
 
-    setselectedMindmapNode(mindmapNode);
+    // try to go through the whole process and parse data object
+    if (!selectedProcessShapeNode.parentId)
+      parseProcessData(selectedProcessShapeNode.id, true);
   }
 
-  async function createMindmapProcess(node: MindmapNode) {
-    const metadata = await node.getMetadata();
-    debugger
-    
-    setSelectedProcessData((process) => {
-      const processName = extractTitleFromHTML(node.nodeView.content);
-      return {
-        ...process,
-        nodeId: node.id,
-        name: processName,
-        ct: metadata.ct || '',
-        co: metadata.co || '',
-        parenNode: node.parentId,
-        nextNodes: node.childrenIds,
-      };
+  async function parseProcessData(startingNodeId: string, init = false) {
+    const processState = [...completeProcess];
+    const startMiroNode = await getProcessMiroNodeById(startingNodeId);
+    if (!startMiroNode) return;
+
+    const processStartNode = await createProcessStep(startMiroNode);
+    if (!processStartNode) return;
+
+    if (init) {
+      processState.push(processStartNode);
+    }
+
+    const connecters = await startMiroNode.getConnectors();
+    const nonVisitedConnectors = connecters.filter(connector => !visitedConnections.includes(connector.id));
+
+
+    if (nonVisitedConnectors.length >= 1) {
+      if (nonVisitedConnectors.length === 1) {
+        const nextMirpNodeId = nonVisitedConnectors[0].end?.item;
+        if (nextMirpNodeId) {
+          const nextProcessNode = await getProcessNodeById(nextMirpNodeId);
+          if (nextProcessNode) {
+            processState.push(nextProcessNode);
+
+            setVisitedConnections((prev) => [...prev, nonVisitedConnectors[0].id]);
+          }
+        }
+      } else {
+        const processesByParent: { [parentId: string]: ProcessNode[] } = {};
+        const parallelProcesses: Process = [];
+
+        for (const connecterInx in connecters){
+          const connecter = connecters[connecterInx];
+          const nextNodeId = connecter.end?.item;
+
+          if(nextNodeId){
+            const nextProcessNode = await getProcessNodeById(nextNodeId);   
+            
+            if(nextProcessNode){
+              const parentId = nextProcessNode?.parentNode || "";
+
+              if(parentId){
+                processesByParent[parentId] = [
+                  ...(processesByParent[parentId] || []),
+                  nextProcessNode,
+                ];
+              }else{
+                parallelProcesses.push(nextProcessNode);
+              }
+            }            
+          }
+
+          setVisitedConnections((prev) => [...prev, connecter.id]);
+        }
+
+        Object.values(processesByParent).forEach((processGroup) => {
+          if (processGroup.length > 0) {
+            const processData = {
+              ...processGroup[0],
+              resource: processGroup.length.toString(),
+            };
+            parallelProcesses.push(processData);
+          }
+        });
+        processState.push(parallelProcesses);
+
+      }
+    }
+
+    setCompleteProcess((state) => ([...state, processState]))
+    console.log(processState, console.log(visitedConnections));
+  }
+
+  async function getProcessNodeById(
+    nodeId: string
+  ): Promise<ProcessNode | null> {
+    const [endNode] = (await miro.board.experimental.get({
+      id: nodeId,
+    })) as ShapeExperimental[];
+    return endNode?.shape === ShapeName.FlowChartProcess
+      ? await createProcessStep(endNode)
+      : null;
+  }
+
+  async function getProcessMiroNodeById(
+    nodeId: string
+  ): Promise<ShapeExperimental | null> {
+    const [node] = (await miro.board.experimental.get({
+      id: nodeId,
+    })) as ShapeExperimental[];
+    return node?.shape === ShapeName.FlowChartProcess ? node : null;
+  }
+
+  function updateMiroNodesRef(node: ShapeExperimental) {
+    setMiroNodes((map) => {
+      map.set(node.id, node);
+      return map;
     });
   }
 
-  function handleProcessStateChange(key: string, value:string): void{
-    setSelectedProcessData(prevProcess => ({
-      ...prevProcess,
-      [key]: value
-    }));
+  async function createProcessStep(
+    node: ShapeExperimental
+  ): Promise<ProcessNode> {
+    const nodeId = node.id;
 
+    // get pars node html content into step anem
+    const stepName = extractTitleFromHTML(node.content);
 
-    if(ProcessProps.includes(key)){
-      selectedMindmapNode?.setMetadata(key, value);
-    }    
-    
-  } 
+    const metadata = await node.getMetadata();
+
+    return {
+      nodeId: nodeId,
+      name: stepName,
+      distribution: metadata.distribution || "",
+      cycle_time: metadata.cycle_time || "0",
+      min_value: metadata.min_value || "0",
+      max_value: metadata.max_value || "0",
+      mean_value: metadata.mean_value || "0",
+      std_dev: metadata.std_dev || "0",
+      changeover: metadata.changeover || "0",
+      resource: metadata.resource || "1",
+      parentNode: node.parentId,
+    };
+  }
+
+  function updateProcessNodemap(processNode: ProcessNode) {
+    setProcessNodes((nodesMap) => {
+      const currentNode = nodesMap.get(processNode.nodeId);
+      const updatedNode = {
+        ...currentNode,
+        ...processNode,
+      };
+
+      nodesMap.set(processNode.nodeId, updatedNode);
+      setSelectedProcessNode(updatedNode);
+      return nodesMap;
+    });
+  }
+
+  function handleProcessStateChange(
+    nodeId: string,
+    stateChange: { [key: string]: string }
+  ): void {
+    setProcessNodes((nodesMap) => {
+      const currentNode = nodesMap.get(nodeId);
+      if (!currentNode) return nodesMap;
+
+      Object.entries(stateChange).forEach(([key, value]) => {
+        const updatedNode = {
+          ...currentNode,
+          [key]: value,
+        };
+
+        nodesMap.set(nodeId, updatedNode);
+        setSelectedProcessNode(updatedNode);
+
+        if (ProcessProps.includes(key)) {
+          miroNodes.get(nodeId)?.setMetadata(key, value);
+        }
+      });
+
+      return nodesMap;
+    });
+  }
 
   async function insertProcessStartpoint() {}
 
@@ -84,7 +233,7 @@ const App: React.FC = () => {
 
   return (
     <div className="grid wrapper">
-      {!selectedMindmapNode && (
+      {!selectedProcessNode && (
         <div className="cs1 ce12">
           <h1>Create Your Process!</h1>
           <p>
@@ -103,7 +252,7 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {!selectedMindmapNode && (
+      {!selectedProcessNode && (
         <div className="cs1 ce12">
           <a
             className="button button-primary"
@@ -114,17 +263,17 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {selectedMindmapNode && (
+      {selectedProcessNode && (
         <div className="cs1 ce12">
           <h1 className="h2">Customize Process Step!</h1>
           <p className="p-medium">set the details for the selected step</p>
         </div>
       )}
 
-      {selectedMindmapNode && (
+      {selectedProcessNode && (
         <div className="cs1 ce12">
           <CreateProcessStep
-            process={selectedProcessData}
+            process={selectedProcessNode}
             onProcessStateChange={handleProcessStateChange}
           />
         </div>
@@ -134,5 +283,7 @@ const App: React.FC = () => {
 };
 
 const container = document.getElementById("root");
-const root = createRoot(container);
-root.render(<App />);
+if (container) {
+  const root = createRoot(container);
+  root.render(<App />);
+}
