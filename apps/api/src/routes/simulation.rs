@@ -10,7 +10,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::{
-    types::{Process, ProcessType, Simulation},
+    types::{Process, Simulation},
     Db,
 };
 

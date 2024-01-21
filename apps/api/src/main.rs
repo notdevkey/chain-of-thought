@@ -1,6 +1,6 @@
 use axum::{
     error_handling::HandleErrorLayer,
-    http::StatusCode,
+    http::{HeaderValue, Method, StatusCode},
     routing::{get, patch, post},
     Router,
 };
@@ -10,7 +10,7 @@ use std::{
     time::Duration,
 };
 use tower::{BoxError, ServiceBuilder};
-use tower_http::{services::ServeDir, trace::TraceLayer};
+use tower_http::{cors::CorsLayer, services::ServeDir, trace::TraceLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use types::{Simulation, SimulationResults};
 use uuid::Uuid;
@@ -33,6 +33,15 @@ async fn main() {
 
     let app = Router::new()
         .route("/simulation/run", post(run_simulation))
+        .layer(
+            // see https://docs.rs/tower-http/latest/tower_http/cors/index.html
+            // for more details
+            //
+            // pay attention that for some request types like posting content-type: application/json
+            // it is required to add ".allow_headers([http::header::CONTENT_TYPE])"
+            // or see this issue https://github.com/tokio-rs/axum/issues/849
+            CorsLayer::very_permissive(),
+        )
         .nest_service("/assets", ServeDir::new("assets"))
         .layer(
             ServiceBuilder::new()
