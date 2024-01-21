@@ -1,30 +1,29 @@
 import * as React from "react";
 import { createRoot } from "react-dom/client";
 
-import "../src/assets/style.css";
 import { ShapeExperimental, ShapeName } from "@mirohq/websdk-types";
-import CreateProcessStep from "./components/createProcessStep";
 import { useState } from "react";
-import {  ProcessNode, ProcessProps, getProcessData } from "./models/process";
-import {
-  createProcessStep,
-} from "./utils/nodeUtil";
+import { QueryClient, QueryClientProvider } from "react-query";
+import "../src/assets/style.css";
+import EnvironmentTab from "./components/tabs/environment.";
+import ProcessTab from "./components/tabs/process";
+import RunTab from "./components/tabs/run";
 import { ProccessTree } from "./parse";
+import { getProcessData } from "./models/process";
 
 enum MiroItemType {
   shpae = "shape",
 }
 
+const queryClient = new QueryClient();
+
+const tabs = ["Environment", "Process", "Run"] as const;
+
+type TabType = (typeof tabs)[number];
+
 const App: React.FC = () => {
-  const [processNodes, setProcessNodes] = useState<Map<string, ProcessNode>>(
-    new Map()
-  );
+  const [selectedTab, setSelectedTab] = useState<TabType>("Environment");
 
-  const [miroNodes, setMiroNodes] = useState<Map<string, ShapeExperimental>>(
-    new Map()
-  );
-
-  const [selectedProcessNode, setSelectedProcessNode] = useState<ProcessNode>();
 
   async function selectionUpdate() {
     const items = await miro.board.experimental.getSelection();
@@ -38,26 +37,13 @@ const App: React.FC = () => {
         (x.shape === ShapeName.FlowChartProcess ||
           x.shape === ShapeName.FlowChartConnector)
     );
-    if (!processShapeNodes.length) return;
+   
 
     // Handling case of only s single selction
     // TODO: Handle case of multi node selection
     const selectedProcessShapeNode = processShapeNodes[0] as ShapeExperimental;
 
-    updateMiroNodesRef(selectedProcessShapeNode);
 
-    switch (selectedProcessShapeNode.shape) {
-      case ShapeName.FlowChartProcess:
-      case ShapeName.FlowChartConnector:
-        const processNode = await createProcessStep(selectedProcessShapeNode);
-        updateProcessNodemap(processNode);
-        break;
-
-      default:
-        break;
-    }
-
-    // try to go through the whole process and parse data object
     if (!selectedProcessShapeNode.parentId){
       const parser =   new ProccessTree();
       const exploer = await parser
@@ -74,107 +60,39 @@ const App: React.FC = () => {
     }
   }
 
-  function updateMiroNodesRef(node: ShapeExperimental) {
-    setMiroNodes((map) => {
-      map.set(node.id, node);
-      return map;
-    });
-  }
 
-  function updateProcessNodemap(processNode: ProcessNode) {
-    setProcessNodes((nodesMap) => {
-      const currentNode = nodesMap.get(processNode.nodeId);
-      const updatedNode = {
-        ...currentNode,
-        ...processNode,
-      };
 
-      nodesMap.set(processNode.nodeId, updatedNode);
-      setSelectedProcessNode(updatedNode);
-      return nodesMap;
-    });
-  }
 
-  function handleProcessStateChange(
-    nodeId: string,
-    stateChange: { [key: string]: string }
-  ): void {
-    setProcessNodes((nodesMap) => {
-      const currentNode = nodesMap.get(nodeId);
-      if (!currentNode) return nodesMap;
-
-      Object.entries(stateChange).forEach(([key, value]) => {
-        const updatedNode = {
-          ...currentNode,
-          [key]: value,
-        };
-
-        nodesMap.set(nodeId, updatedNode);
-        setSelectedProcessNode(updatedNode);
-
-        if (ProcessProps.includes(key)) {
-          miroNodes.get(nodeId)?.setMetadata(key, value);
-        }
-      });
-
-      return nodesMap;
-    });
-  }
-
-  async function insertProcessStartpoint() {}
 
   React.useEffect(() => {
     miro.board.ui.on("selection:update", selectionUpdate);
   }, []);
 
   return (
-    <div className="grid wrapper">
-      {!selectedProcessNode && (
-        <div className="cs1 ce12">
-          <h1>Create Your Process!</h1>
-          <p>
-            Utilize the Mindmap Feature to Define Your Manufacturing Process
-          </p>
-          <p>
-            Building your manufacturing process is made easy with the Mindmap
-            feature. Each node in the mind map represents a crucial process
-            step.
-          </p>
-          <p>
-            To set the details for each step, simply select the corresponding
-            node on the board. This allows you to define and customize each
-            process step with precision.
-          </p>
+    <QueryClientProvider client={queryClient}>
+      <div className="wrapper">
+        <div className="tabs">
+          <div className="tabs-header-list">
+            {tabs.map((tab, i) => (
+              <div
+                tabIndex={1}
+                onClick={() => setSelectedTab(tab)}
+                key={i}
+                className={`tab ${selectedTab === tab ? "tab-active" : ""}`}
+              >
+                <div className="tab-text">{tab}</div>
+              </div>
+            ))}
+          </div>
         </div>
-      )}
-
-      {!selectedProcessNode && (
-        <div className="cs1 ce12">
-          <a
-            className="button button-primary"
-            onClick={insertProcessStartpoint}
-          >
-            Insert Process start point
-          </a>
-        </div>
-      )}
-
-      {selectedProcessNode && (
-        <div className="cs1 ce12">
-          <h1 className="h2">Customize Process Step!</h1>
-          <p className="p-medium">set the details for the selected step</p>
-        </div>
-      )}
-
-      {selectedProcessNode && (
-        <div className="cs1 ce12">
-          <CreateProcessStep
-            process={selectedProcessNode}
-            onProcessStateChange={handleProcessStateChange}
-          />
-        </div>
-      )}
-    </div>
+        {selectedTab === "Environment" && (
+          <EnvironmentTab buttonClick={() => setSelectedTab("Process")} />
+        )}
+        {selectedTab === "Process" && <ProcessTab />}
+        {selectedTab === "Run" && <RunTab />}
+        
+      </div>
+    </QueryClientProvider>
   );
 };
 
