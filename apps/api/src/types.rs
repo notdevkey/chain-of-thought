@@ -12,18 +12,42 @@ pub enum Distribution {
 }
 
 #[derive(Serialize, Clone, Default, Debug, Deserialize)]
-pub struct Process {
-    pub name: String,
-    pub distribution: Distribution,
-    pub cycle_time: i32,
-    pub min_value: i32,
-    pub max_value: i32,
-    pub mean_value: i32,
-    pub std_dev: i32,
-    pub changeover: i32,
-    pub resource: i32,
+pub struct StepResult {
+    pub item_number: i32,
+    pub item_name: String,
+    pub process_name: String,
+    pub start_time: i32,
+    pub waiting_time: i32,
+    pub completion_time: i32,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ProcessStep {
+    #[serde(rename = "type")]
+    step_type: String,
+    name: String,
+    distribution: String,
+    cycle_time: u32,
+    resource: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Queue {
+    #[serde(rename = "type")]
+    queue_type: String,
+    name: String,
+    capacity: u32,
+    resource: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(untagged)]
+pub enum Process {
+    Step(ProcessStep),
+    Steps(Vec<ProcessStep>),
+    Queue(Queue),
+    Queues(Vec<Queue>),
+}
 #[derive(Debug, Serialize, Clone, Deserialize)]
 pub struct Environment {
     simulation_time: i32,
@@ -34,14 +58,7 @@ pub struct Environment {
 #[derive(Debug, Serialize, Clone, Deserialize)]
 pub struct Simulation {
     pub environment: Environment,
-    pub processes: Vec<ProcessType>,
-}
-
-#[derive(Serialize, Clone, Debug, Deserialize)]
-#[serde(untagged)]
-pub enum ProcessType {
-    Single(Process),
-    Multiple(Vec<Process>),
+    pub processes: Vec<Process>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -68,7 +85,10 @@ impl Default for Detail {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct SimulationResults {
-    pub timestamp: String,
-    pub image_url: String,
-    pub details: Vec<Detail>,
+    pub average_waiting_time: i32,
+    pub average_lead_time: i32,
+    pub average_throughput: i32,
+    pub timestamp: Option<String>,
+    pub plot_base64: String,
+    pub results: Vec<StepResult>,
 }

@@ -3,8 +3,11 @@ import { createRoot } from "react-dom/client";
 
 import { ShapeExperimental, ShapeName } from "@mirohq/websdk-types";
 import { useState } from "react";
+import { QueryClient, QueryClientProvider } from "react-query";
 import "../src/assets/style.css";
-import CreateProcessStep from "./components/createProcessStep";
+import EnvironmentTab from "./components/tabs/environment.";
+import ProcessTab from "./components/tabs/process";
+import RunTab from "./components/tabs/run";
 import { Process, ProcessNode, ProcessProps } from "./models/process";
 import { extractTitleFromHTML } from "./utils/domUtil";
 
@@ -12,9 +15,16 @@ enum MiroItemType {
   shpae = "shape",
 }
 
+const queryClient = new QueryClient();
+
+const tabs = ["Environment", "Process", "Run"] as const;
+
+type TabType = (typeof tabs)[number];
+
 const App: React.FC = () => {
   const [completeProcess, setCompleteProcess] = useState<Process[]>([]);
   const [visitedConnections, setVisitedConnections] = useState<string[]>([]);
+  const [selectedTab, setSelectedTab] = useState<TabType>("Environment");
 
   const [processNodes, setProcessNodes] = useState<Map<string, ProcessNode>>(
     new Map()
@@ -238,8 +248,28 @@ const App: React.FC = () => {
   }, []);
 
   return (
-    <div className="grid wrapper">
-      {!selectedProcessNode && (
+    <QueryClientProvider client={queryClient}>
+      <div className="wrapper">
+        <div className="tabs">
+          <div className="tabs-header-list">
+            {tabs.map((tab, i) => (
+              <div
+                tabIndex={1}
+                onClick={() => setSelectedTab(tab)}
+                key={i}
+                className={`tab ${selectedTab === tab ? "tab-active" : ""}`}
+              >
+                <div className="tab-text">{tab}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        {selectedTab === "Environment" && (
+          <EnvironmentTab buttonClick={() => setSelectedTab("Process")} />
+        )}
+        {selectedTab === "Process" && <ProcessTab />}
+        {selectedTab === "Run" && <RunTab />}
+        {/* {!selectedProcessNode && (
         <div className="cs1 ce12">
           <h1>Create Your Process!</h1>
           <p>
@@ -283,8 +313,9 @@ const App: React.FC = () => {
             onProcessStateChange={handleProcessStateChange}
           />
         </div>
-      )}
-    </div>
+      )} */}
+      </div>
+    </QueryClientProvider>
   );
 };
 
