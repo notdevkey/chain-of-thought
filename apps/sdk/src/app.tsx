@@ -5,17 +5,17 @@ import "../src/assets/style.css";
 import { ShapeExperimental, ShapeName } from "@mirohq/websdk-types";
 import CreateProcessStep from "./components/createProcessStep";
 import { useState } from "react";
-import { extractTitleFromHTML } from "./utils/domUtil";
-import { Process, ProcessNode, ProcessProps } from "./models/process";
+import {  ProcessNode, ProcessProps, getProcessData } from "./models/process";
+import {
+  createProcessStep,
+} from "./utils/nodeUtil";
+import { ProccessTree } from "./parse";
 
 enum MiroItemType {
   shpae = "shape",
 }
 
 const App: React.FC = () => {
-  const [completeProcess, setCompleteProcess] = useState<Process[]>([]);
-  const [visitedConnections, setVisitedConnections] = useState<string[]>([]);
-
   const [processNodes, setProcessNodes] = useState<Map<string, ProcessNode>>(
     new Map()
   );
@@ -28,6 +28,10 @@ const App: React.FC = () => {
 
   async function selectionUpdate() {
     const items = await miro.board.experimental.getSelection();
+
+    // console.log(items[0].id);
+    // return
+
     const processShapeNodes = items.filter(
       (x) =>
         x.type === MiroItemType.shpae &&
@@ -44,11 +48,9 @@ const App: React.FC = () => {
 
     switch (selectedProcessShapeNode.shape) {
       case ShapeName.FlowChartProcess:
+      case ShapeName.FlowChartConnector:
         const processNode = await createProcessStep(selectedProcessShapeNode);
         updateProcessNodemap(processNode);
-        break;
-
-      case ShapeName.FlowChartConnector:
         break;
 
       default:
@@ -56,101 +58,20 @@ const App: React.FC = () => {
     }
 
     // try to go through the whole process and parse data object
-    if (!selectedProcessShapeNode.parentId)
-      parseProcessData(selectedProcessShapeNode.id, true);
-  }
+    if (!selectedProcessShapeNode.parentId){
+      const parser =   new ProccessTree();
+      const exploer = await parser
+      .traverseFlowchart(selectedProcessShapeNode.id);
 
-  async function parseProcessData(startingNodeId: string, init = false) {
-    const processState = [...completeProcess];
-    const startMiroNode = await getProcessMiroNodeById(startingNodeId);
-    if (!startMiroNode) return;
+      console.log('parser, ', exploer)
 
-    const processStartNode = await createProcessStep(startMiroNode);
-    if (!processStartNode) return;
+      const mapped = parser.countNodesAtEachLevel(exploer)
 
-    if (init) {
-      processState.push(processStartNode);
+      console.log('test: ', mapped);
+      
+      const resutl = await getProcessData(mapped)
+      console.log('resutl: ', resutl);
     }
-
-    const connecters = await startMiroNode.getConnectors();
-    const nonVisitedConnectors = connecters.filter(connector => !visitedConnections.includes(connector.id));
-
-
-    if (nonVisitedConnectors.length >= 1) {
-      if (nonVisitedConnectors.length === 1) {
-        const nextMirpNodeId = nonVisitedConnectors[0].end?.item;
-        if (nextMirpNodeId) {
-          const nextProcessNode = await getProcessNodeById(nextMirpNodeId);
-          if (nextProcessNode) {
-            processState.push(nextProcessNode);
-
-            setVisitedConnections((prev) => [...prev, nonVisitedConnectors[0].id]);
-          }
-        }
-      } else {
-        const processesByParent: { [parentId: string]: ProcessNode[] } = {};
-        const parallelProcesses: Process = [];
-
-        for (const connecterInx in connecters){
-          const connecter = connecters[connecterInx];
-          const nextNodeId = connecter.end?.item;
-
-          if(nextNodeId){
-            const nextProcessNode = await getProcessNodeById(nextNodeId);   
-            
-            if(nextProcessNode){
-              const parentId = nextProcessNode?.parentNode || "";
-
-              if(parentId){
-                processesByParent[parentId] = [
-                  ...(processesByParent[parentId] || []),
-                  nextProcessNode,
-                ];
-              }else{
-                parallelProcesses.push(nextProcessNode);
-              }
-            }            
-          }
-
-          setVisitedConnections((prev) => [...prev, connecter.id]);
-        }
-
-        Object.values(processesByParent).forEach((processGroup) => {
-          if (processGroup.length > 0) {
-            const processData = {
-              ...processGroup[0],
-              resource: processGroup.length.toString(),
-            };
-            parallelProcesses.push(processData);
-          }
-        });
-        processState.push(parallelProcesses);
-
-      }
-    }
-
-    setCompleteProcess((state) => ([...state, processState]))
-    console.log(processState, console.log(visitedConnections));
-  }
-
-  async function getProcessNodeById(
-    nodeId: string
-  ): Promise<ProcessNode | null> {
-    const [endNode] = (await miro.board.experimental.get({
-      id: nodeId,
-    })) as ShapeExperimental[];
-    return endNode?.shape === ShapeName.FlowChartProcess
-      ? await createProcessStep(endNode)
-      : null;
-  }
-
-  async function getProcessMiroNodeById(
-    nodeId: string
-  ): Promise<ShapeExperimental | null> {
-    const [node] = (await miro.board.experimental.get({
-      id: nodeId,
-    })) as ShapeExperimental[];
-    return node?.shape === ShapeName.FlowChartProcess ? node : null;
   }
 
   function updateMiroNodesRef(node: ShapeExperimental) {
@@ -158,31 +79,6 @@ const App: React.FC = () => {
       map.set(node.id, node);
       return map;
     });
-  }
-
-  async function createProcessStep(
-    node: ShapeExperimental
-  ): Promise<ProcessNode> {
-    const nodeId = node.id;
-
-    // get pars node html content into step anem
-    const stepName = extractTitleFromHTML(node.content);
-
-    const metadata = await node.getMetadata();
-
-    return {
-      nodeId: nodeId,
-      name: stepName,
-      distribution: metadata.distribution || "",
-      cycle_time: metadata.cycle_time || "0",
-      min_value: metadata.min_value || "0",
-      max_value: metadata.max_value || "0",
-      mean_value: metadata.mean_value || "0",
-      std_dev: metadata.std_dev || "0",
-      changeover: metadata.changeover || "0",
-      resource: metadata.resource || "1",
-      parentNode: node.parentId,
-    };
   }
 
   function updateProcessNodemap(processNode: ProcessNode) {
