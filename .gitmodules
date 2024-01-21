@@ -1,3 +1,0 @@
-[submodule "apps/simulation"]
-	path = apps/simulation
-	url = https://github.com/awaism47/simulation.git
