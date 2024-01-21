@@ -21,55 +21,59 @@ export enum ProcessNodeType {
   queue = "queue",
 }
 
-export async function getProcessData(flowchartTree: OptimalStructureArray): Promise<Process>{
+export async function getProcessData(
+  flowchartTree: OptimalStructureArray
+): Promise<Process> {
   const process: Process = [];
 
-  for (const level of flowchartTree){
-    if(!level.length) continue;
+  for (const level of flowchartTree) {
+    if (!level.length) continue;
 
-    if(level.length  === 1){
+    if (level.length === 1) {
       const processNode = await getProcessNodeById(level[0]);
       process.push(processNode);
-    }else{
+    } else {
       // merge element within same frame
       const parrarelProccess: Array<ProcessNode> = [];
       const siblingsNodes = [];
-      for (const node of level){
-
+      for (const node of level) {
         const miroNode = await getProcessMiroNodeById(node);
-        if(miroNode){
-          siblingsNodes.push({id: miroNode.id, parentId: miroNode.parentId})
+        if (miroNode) {
+          siblingsNodes.push({ id: miroNode.id, parentId: miroNode.parentId });
         }
       }
-      const groupedSiblingByParent = groupBy(siblingsNodes, 'parentId');
+      const groupedSiblingByParent = groupBy(siblingsNodes, "parentId");
 
-      for( const groupedSibling in groupedSiblingByParent){
-          if (groupedSibling==='default'){
-            const defatulNodes = groupedSiblingByParent[groupedSibling]
-              for (const defaultNode of defatulNodes){
-                const processNode = await getProcessNodeById(defaultNode.id);
-                if(!processNode) continue;
-                parrarelProccess.push(processNode)
-              }
-          }else{
-            const frameNode = groupedSiblingByParent[groupedSibling][0];
-            const processNode = await getProcessNodeById(frameNode.id);
-            if(!processNode) continue;
-            parrarelProccess.push({...processNode, resource: groupedSiblingByParent[groupedSibling].length});
+      for (const groupedSibling in groupedSiblingByParent) {
+        if (groupedSibling === "default") {
+          const defatulNodes = groupedSiblingByParent[groupedSibling];
+          for (const defaultNode of defatulNodes) {
+            const processNode = await getProcessNodeById(defaultNode.id);
+            if (!processNode) continue;
+            parrarelProccess.push(processNode);
           }
+        } else {
+          const frameNode = groupedSiblingByParent[groupedSibling][0];
+          const processNode = await getProcessNodeById(frameNode.id);
+          if (!processNode) continue;
+          parrarelProccess.push({
+            ...processNode,
+            resource: groupedSiblingByParent[groupedSibling].length,
+          });
+        }
       }
 
-      process.push(parrarelProccess)
+      process.push(parrarelProccess);
     }
   }
 
-  return process
-
+  return process;
 }
 
- function groupBy(array: any[], key: string) {
+function groupBy(array: any[], key: string) {
   return array.reduce((result, item) => {
-    const groupKey = item[key] === undefined || item[key] === '' ? 'default' : item[key];
+    const groupKey =
+      item[key] === undefined || item[key] === "" ? "default" : item[key];
     result[groupKey] = result[groupKey] || [];
     result[groupKey].push(item);
     return result;
