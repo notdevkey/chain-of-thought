@@ -82,7 +82,6 @@ export default function StepDropdown({
       </div>
       {isExpanded && currentStep?.type === "Process step" && (
         <>
-          <h3 className="h3">Change parameters for frame</h3>
           <div
             style={{ marginTop: "20px" }}
             className={`form-group-small ${processErrors.name && "error"}`}

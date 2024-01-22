@@ -27,8 +27,6 @@ export default function EnvironmentTab({ buttonClick }: Props) {
     defaultValues: environment,
   });
 
-  console.log(watch());
-
   return (
     <>
       <div className="form-group" style={{ marginTop: "20px" }}>
