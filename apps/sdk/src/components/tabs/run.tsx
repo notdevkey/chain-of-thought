@@ -1,6 +1,9 @@
 import axios from "axios";
 import { useState } from "react";
 import { useMutation } from "react-query";
+import { Process, getProcessData } from "../../models/process";
+import { ProccessTree } from "../../parse";
+import { useSteps } from "../../stores/steps.store";
 
 interface Details {
   name: string;
@@ -24,48 +27,32 @@ interface SimulationResults {
 
 export default function RunTab() {
   const [resultsHistory, setResultsHistory] = useState<SimulationResults[]>([]);
+  const { steps } = useSteps();
+  // const { schema } = useFlowchartSchema();
   const { data: results, mutate: runSimulation } = useMutation(
     ["simulation", "run"],
     async () => {
+      const firstNode = steps[0];
+      let processes: Process = [];
+      if (firstNode) {
+        const parser = new ProccessTree();
+        const exploer = await parser.traverseFlowchart(firstNode.id);
+
+        const mapped = parser.countNodesAtEachLevel(exploer);
+        processes = await getProcessData(mapped);
+      }
+
+      console.log(processes, "PROCESSES");
+
       const { data } = await axios.post<SimulationResults>(
-        "http://localhost:8000/simulation/run",
+        "http://localhost:5000/simulation/run",
         {
           environment: {
             simulation_time: 100,
             warm_up_time: 20,
             interarrival: 1,
           },
-          processes: [
-            {
-              type: "Process step",
-              name: "test",
-              distribution: "Uniform",
-              cycle_time: 10,
-              resource: 2,
-            },
-            [
-              {
-                type: "Process step",
-                name: "test",
-                distribution: "Uniform",
-                cycle_time: 10,
-                resource: 2,
-              },
-              {
-                type: "Process step",
-                name: "test",
-                distribution: "Uniform",
-                cycle_time: 10,
-                resource: 2,
-              },
-            ],
-            {
-              type: "Queue",
-              name: "test",
-              capacity: 10,
-              resource: 2,
-            },
-          ],
+          processes,
         }
       );
       setResultsHistory((history) => [...history, data]);

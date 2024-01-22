@@ -55,11 +55,21 @@ export async function getProcessData(
         } else {
           const frameNode = groupedSiblingByParent[groupedSibling][0];
           const processNode = await getProcessNodeById(frameNode.id);
+
           if (!processNode) continue;
-          parrarelProccess.push({
+          const resource = groupedSiblingByParent[groupedSibling].length;
+          const mergedProcess = {
             ...processNode,
             resource: groupedSiblingByParent[groupedSibling].length,
-          });
+          };
+          if (siblingsNodes.length === resource0) {
+            process.push(mergedProcess);
+          } else {
+            parrarelProccess.push({
+              ...processNode,
+              resource: groupedSiblingByParent[groupedSibling].length,
+            });
+          }
         }
       }
 

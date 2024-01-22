@@ -1,6 +1,7 @@
 import { Frame, ShapeExperimental } from "@mirohq/websdk-types";
 import { create } from "zustand";
-
+import { Process, getProcessData } from "../models/process";
+import { ProccessTree } from "../parse";
 interface Process {
   name: string;
   distribution: "Fixed" | "Uniform";
@@ -19,6 +20,7 @@ interface StepsStore {
   addStep(step: Queue | Process, stepType: "Process step" | "Queue"): void;
   updateStep(step: Partial<Queue | Process>, id: string): void;
   deleteStep(id: string): void;
+  sync(): void;
 }
 
 export const useSteps = create<StepsStore>()((set) => ({
@@ -183,4 +185,32 @@ export const useSteps = create<StepsStore>()((set) => ({
   },
   deleteStep: (id: string) =>
     set((state) => ({ steps: state.steps.filter((step) => step.id !== id) })),
+
+  sync: async () => {
+    const allItems = (await miro.board.experimental.get({
+      type: "shape",
+    })) as ShapeExperimental[];
+    const nonRootShapeIds = new Set<string>();
+
+    for (const item of allItems) {
+      const itemConnectors = await item.getConnectors();
+
+      // itemConnecters array of {id: string, start?: itemId?, end: itemId}
+      itemConnectors.forEach((connector) => {
+        if (connector.end?.item) {
+          nonRootShapeIds.add(connector.end.item);
+        }
+      });
+    }
+
+    const rootNode = allItems.find((item) => !nonRootShapeIds.has(item.id));
+
+    if (rootNode) {
+      const parser = new ProccessTree();
+      const exploer = await parser.traverseFlowchart(firstNode.id);
+
+      const mapped = parser.countNodesAtEachLevel(exploer);
+      processes = await getProcessData(mapped);
+    }
+  },
 }));
